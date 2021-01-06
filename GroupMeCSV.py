@@ -67,16 +67,47 @@ def latest_user_names(messages):
 		uid = m['user_id']
 		if uid not in usermap or usermap[uid][1] > int(m['created_at']):
 			usermap[uid] = (m['name'].encode('utf-8'), int(m['created_at']))
+		try:
+			if m['event']['type'] == 'membership.announce.joined':
+				uid = str(m['event']['data']['user']['id'])
+				if uid not in usermap or usermap[uid][1] > int(m['created_at']):
+					usermap[uid] = (m['event']['data']['user']['nickname'].encode('utf-8'), 
+						int(m['created_at']))
+
+			elif m['event']['type'] == 'membership.nickname_changed':
+				uid = str(m['event']['data']['user']['id'])
+				if uid not in usermap or usermap[uid][1] > int(m['created_at']):
+					usermap[uid] = (m['event']['data']['user']['nickname'].encode('utf-8'), 
+						int(m['created_at']))
+		except:
+			placeholder = False
+		
 	return {uid: usermap[uid][0] for uid in usermap}
 
 def user_stats(messages, usermap):
-	"""Keys: (posts, likes_recieved, likes_given, wordcount, images, misspellings, kicked)"""
+
 	stats = {}
 	checker = SpellChecker('en_US')
+
 	for user_id in usermap:
+
+		def dictionary_func():
+			dictionary = {}
+			for user_id_j in usermap:
+				dictionary[user_id_j] = {
+					'name': usermap[user_id_j],
+					'like': 0
+					}
+			return dictionary
+		
+		given = dictionary_func()
+		received = dictionary_func()
+		given_percent = dictionary_func()
+		received_percent = dictionary_func()
+
 		stats[usermap[user_id]] = {
 			'posts': [],
-			'likes_recieved': 0,
+			'likes_received': 0,
 			'likes_given': 0,
 			'wordcount': 0,
 			'images': 0,
@@ -84,7 +115,13 @@ def user_stats(messages, usermap):
 			'kicked': 0,
 			'been_kicked': 0,
 			'message_time': [],
-			'message_length': []}
+			'message_length': [],
+			'likes_msg_received': [],
+			'likes_given_users': given,
+			'likes_received_users': received,
+			'likes_given_users_percent': given_percent,
+			'likes_received_users_percent': received_percent
+			}
 	current_names = {} # map user id to alias at the time of each message
 	for m in reversed(messages):
 		current_names[m['sender_id']] = m['name']
@@ -100,8 +137,6 @@ def user_stats(messages, usermap):
 					remover = 0
 					removed = 0
 					for uid in current_names:
-						#print("current_names", current_names,"uid",uid,"s",s)
-						#print("current_names[uid] ",current_names[uid])
 						if current_names[uid] == s[0]: remover = uid
 						if len(current_names) != len(s): removed = uid
 						elif current_names[uid] == s[1]: removed = uid
@@ -109,17 +144,25 @@ def user_stats(messages, usermap):
 						stats[usermap[remover]]['kicked'] += 1
 						stats[usermap[removed]]['been_kicked'] += 1
 		name = usermap[m['sender_id']]
+		msg_user_id = m['sender_id']
 		stats[name]['posts'].append(m)
 		MsgTime = datetime.utcfromtimestamp(m['created_at']).strftime('%Y-%m-%d %H:%M:%S')
 		stats[name]['message_time'].append(MsgTime.encode('utf-8'))
-		stats[name]['likes_recieved'] += len(m['favorited_by'])
+		stats[name]['likes_received'] += len(m['favorited_by'])
 		stats[name]["sender"] = m['sender_type']
+		stats[name]['likes_msg_received'].append(len(m['favorited_by']))
 		if m['text'] != None:
 			stats[name]['message_length'].append(len(m['text']))
 		for liker in m['favorited_by']:
 			try:
 				likername = usermap[liker]
+				likerStr = str(liker)
 				stats[likername]['likes_given'] += 1
+				stats[name]['likes_received_users'][likerStr]['like'] += 1
+				stats[name]['likes_received_users_percent'][likerStr]['like'] +=1
+
+				stats[likername]['likes_given_users'][msg_user_id]['like'] += 1
+				stats[likername]['likes_given_users_percent'][msg_user_id]['like'] += 1
 			except KeyError:
 				pass
 		stats[name]['images'] += 1 if len(m['attachments']) > 0 else 0
@@ -127,12 +170,35 @@ def user_stats(messages, usermap):
 			stats[name]['wordcount'] += len(m['text'].split(' '))
 			checker.set_text(m['text'])
 			stats[name]['misspellings'] += [error.word for error in list(checker)]
-	
 	#Deletes non users from analysis otherwise it gives errors for message times
+
+	for user_id in usermap:
+		stats[usermap[user_id]]['post_total'] = len(stats[usermap[user_id]]['posts'])
+
+	for user_id in usermap:
+		tempLength = stats[usermap[user_id]]['post_total']
+		for user in stats[usermap[user_id]]['likes_received_users_percent']:
+			tempLengthUser = stats[usermap[user]]['post_total']
+			#Received
+			if tempLength != 0:
+				stats[usermap[user_id]]['likes_received_users_percent'][user]['like'] = \
+				float(str(stats[usermap[user_id]]['likes_received_users_percent'][user]['like']/tempLength)[:6])
+			else:
+				stats[usermap[user_id]]['likes_received_users_percent'][user]['like'] = "Divide By Zero"
+            #Given
+			if tempLengthUser != 0:
+				stats[usermap[user_id]]['likes_given_users_percent'][user]['like'] = \
+				float(str(stats[usermap[user_id]]['likes_given_users_percent'][user]['like']/tempLengthUser)[:6])
+			else:
+				stats[usermap[user_id]]['likes_given_users_percent'][user]['like'] = "Divide By Zero"
+
 	Deletion = []
 	for u in stats:
-		if stats[u]['posts'][0]['sender_type'] != "user":
-			Deletion = np.append(Deletion, u)
+		try:
+			if stats[u]['posts'][0]['sender_type'] != "user":
+				Deletion = np.append(Deletion, u)
+		except:
+			placeholder = False
 
 	for j in Deletion:
 		try: 
@@ -148,15 +214,29 @@ def print_stats(userstats, num_listed):
 
 	total_posts = sum([len(userstats[u]['posts']) for u in userstats])
 	posts = list(reversed([(len(userstats[u]['posts']), u) for u in userstats]))
-	likes_recieved = list(reversed([(userstats[u]['likes_recieved'], u) for u in userstats]))
+	likes_received = list(reversed([(userstats[u]['likes_received'], u) for u in userstats]))
 	likes_given = list(reversed([(userstats[u]['likes_given'], u) for u in userstats]))
-	average_likes = list(reversed([(float(userstats[u]['likes_recieved']) / len(userstats[u]['posts']), u) for u in userstats]))
-	misspellings = list(reversed([(float(len(userstats[u]['misspellings'])) / len(userstats[u]['posts']), u) for u in userstats]))
+	average_likes = []
+	misspellings = []
+	for u in userstats:
+		if len(userstats[u]['posts']) != 0: 
+			average_likes = np.append(average_likes, (float(userstats[u]['likes_received'])) / len(userstats[u]['posts']))
+			misspellings = np.append(misspellings, float(len(userstats[u]['misspellings'])) / len(userstats[u]['posts']))
+		else:
+			average_likes = np.append(average_likes, "Error")
+			misspellings = np.append(misspellings, "Error")
+
+	average_likes = list(reversed(average_likes))
+	misspellings = list(reversed(misspellings))
 	misspelled_count = {u: {} for u in userstats} #map users to a dict that maps words to times misspelled
 	#Times of messages array
 	times = list(reversed([(userstats[u]['message_time']) for u in userstats]))
-	messageLengths =list(reversed([(userstats[u]['message_length']) for u in userstats]))
+	messageLengths = list(reversed([(userstats[u]['message_length']) for u in userstats]))
+	messageLikes = list(reversed([(userstats[u]['likes_msg_received']) for u in userstats]))
 	for u in userstats:
+		#Preparing for the future
+		lengthLikes = len(userstats[u]['likes_received_users'])
+
 		all_misspellings = userstats[u]['misspellings']
 		for word in all_misspellings:
 			if word not in misspelled_count[u]:
@@ -173,7 +253,40 @@ def print_stats(userstats, num_listed):
 
 	images = list(reversed([(userstats[u]['images'], u) for u in userstats]))
 
+	likes_received_people = np.zeros(lengthLikes)
+	likes_given_people = np.zeros(lengthLikes)
+	likes_received_people_percent = np.zeros(lengthLikes)
+	likes_given_people_percent = np.zeros(lengthLikes)
+	for u in userstats:
+		tempLikeArrayRec = []
+		tempLikeArrayGiv = []
+		tempLikeArrayRecPer = []
+		tempLikeArrayGivPer = []
 
+		for name in userstats[u]['likes_received_users']:
+			tempLikeArrayRec = np.append(tempLikeArrayRec, userstats[u]['likes_received_users'][name]['like'])
+			tempLikeArrayGiv = np.append(tempLikeArrayGiv, userstats[u]['likes_given_users'][name]['like'])
+			tempLikeArrayRecPer = np.append(tempLikeArrayRecPer, userstats[u]['likes_received_users_percent'][name]['like'])
+			tempLikeArrayGivPer = np.append(tempLikeArrayGivPer, userstats[u]['likes_given_users_percent'][name]['like'])
+
+		likes_received_people = np.vstack((likes_received_people,tempLikeArrayRec))
+		likes_given_people = np.vstack((likes_given_people,tempLikeArrayGiv))
+		likes_received_people_percent = np.vstack((likes_received_people_percent,tempLikeArrayRecPer))
+		likes_given_people_percent = np.vstack((likes_given_people_percent,tempLikeArrayGivPer))
+
+		                            
+	likes_received_people = np.flip(likes_received_people[1:], axis = 0)
+	likes_given_people = np.flip(likes_given_people[1:], axis = 0)
+	likes_received_people_percent = np.flip(likes_received_people_percent[1:], axis = 0)
+	likes_given_people_percent = np.flip(likes_given_people_percent[1:], axis = 0)
+
+	def PersonHeader(header, Type):
+		for u in userstats:
+			for name in userstats[u]['likes_received_users']:
+				header = np.append(header, userstats[u]['likes_received_users'][name]['name'].decode('ascii', 'ignore'))
+			header = np.append(header, "Like Break " + Type)
+			break 
+		return header
 	#function for writing the time array to the csv file
 	#for each name
 	def writeTime(i, maxArrayLength, writing, timeArray_i):
@@ -196,14 +309,34 @@ def print_stats(userstats, num_listed):
 		writing = np.append(writing, "Length Break")
 		return writing
 
+	def writeLike(i, maxArrayLength, writing, likeArray_i):
+		length = len(likeArray_i)
+		for j in range(0, maxArrayLength):
+				if j < length:
+					writing = np.append(writing, likeArray_i[j])
+				else:
+					writing = np.append(writing, "nothingLike")
+		writing = np.append(writing, "Like Break")
+		return writing
+
+	def writeLikePerson(array, writing):
+		for i in range(0, len(array)):
+			writing = np.append(writing, array[i])
+
+		writing = np.append(writing, "Break")
+
+		return writing
+
 
 	with open('stats.csv', 'w+', errors = 'strict', encoding="utf-8") as csvfile:
 		writer = csv.writer(csvfile, 
 					  delimiter=',', 
 					  lineterminator = '\n')
-		header = ['Name','Posts','Likes Recieved', 'Likes Given', 'Likes Received to Likes Given', 'Average Likes', 
+		header = ['Name','Posts','Likes Received', 'Likes Given', 'Likes Received to Likes Given', 'Average Likes', 
 				   'Misspelled Words Per Post','Images and Gifs',
 				   'Times Kicked from the Group', 'Times Kicked Others']
+		
+		#For the time data
 		maxTime = 0
 		for i in range(0, len(times)):
 			size =  np.size(times[i])
@@ -215,6 +348,7 @@ def print_stats(userstats, num_listed):
 			n +=1
 		header = np.append(header, "Message Time-Length Break")
 
+		#For the length data
 		maxLength = 0
 		for i in range(0, len(messageLengths)):
 			size =  np.size(messageLengths[i])
@@ -226,29 +360,55 @@ def print_stats(userstats, num_listed):
 			n +=1
 		header = np.append(header, "Message Length Break")
 
+		#For the like data
+		#This is the same as the time data since all messages are included.
+		n = 1
+		while n <= maxTime:
+			header = np.append(header, n)
+			n +=1
+		header = np.append(header, "Message Like Break")
 
+		header = PersonHeader(header, "Received")
+		header = PersonHeader(header, "Given")
+		header = PersonHeader(header, "Received Percent")
+		header = PersonHeader(header, "Given Percent")
 
 		writer.writerow(header)
 
 		for i in range(num_listed):
 			timesArr = times[i]
 			lengthArr = messageLengths[i]
-			length = len(times[i])
+			likesArr = messageLikes[i]
+			likesRecArr = likes_received_people[i]
+			likesGivenArr = likes_given_people[i]
+			likesRecArrPercent = likes_received_people_percent[i]
+			likesGivenArrPercent = likes_given_people_percent[i]
+
 			user_name =  posts[i][1]
 			user_name = user_name.decode('ascii', 'ignore')
 			writing = []
 			if likes_given[i][0] != 0:
-				writing = [user_name, posts[i][0], likes_recieved[i][0], likes_given[i][0], str(likes_recieved[i][0]/likes_given[i][0])[:4], 
-						str(average_likes[i][0])[:4], str(misspellings[i][0])[:4], images[i][0], been_kicked[i][0], kicked[i][0]]
+				writing = [user_name, posts[i][0], likes_received[i][0], likes_given[i][0], str(likes_received[i][0]/likes_given[i][0])[:6], 
+						str(average_likes[i])[:6], str(misspellings[i])[:6], images[i][0], been_kicked[i][0], kicked[i][0]]
 				writing = writeTime(i, maxTime, writing, timesArr)
 				writing = writeLength(i, maxLength, writing, lengthArr)
+				writing = writeLike(i, maxTime, writing, likesArr)
+				writing = writeLikePerson(likesRecArr, writing)
+				writing = writeLikePerson(likesGivenArr, writing)
+				writing = writeLikePerson(likesRecArrPercent, writing)
+				writing = writeLikePerson(likesGivenArrPercent, writing)
 				writer.writerow(writing)
 
 			else:
-				writing = [user_name, posts[i][0], likes_recieved[i][0], likes_given[i][0], 'No likes given likes', 
-						str(average_likes[i][0])[:4], str(misspellings[i][0])[:4], images[i][0], been_kicked[i][0], kicked[i][0], times[i]]
-				writing = writeTime(i, maxTime, writing, lengthArr)
+				writing = [user_name, posts[i][0], likes_received[i][0], likes_given[i][0], 'No likes given likes', 
+						str(average_likes[i])[:6], str(misspellings[i])[:6], images[i][0], been_kicked[i][0], kicked[i][0], times[i]]
+				writing = writeTime(i, maxTime, writing, timesArr)
 				writing = writeLength(i, maxLength, writing, lengthArr)
+				writing = writeLike(i, maxTime, writing, likesArr)
+				writing = writeLikePerson(likesRecArr, writing)
+				writing = writeLikePerson(likesGivenArr, writing)
+				writing = writeLikePerson(likesRecArrPercent, writing)
+				writing = writeLikePerson(likesGivenArrPercent, writing)
 				writer.writerow(writing)
 
 
