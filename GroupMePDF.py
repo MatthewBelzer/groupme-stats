@@ -16,130 +16,123 @@ df = pd.read_csv(csvFile)
 df = df.sort_values('Name')
 timeEnd = df.columns.get_loc("Message Time-Length Break")
 lengthEnd = df.columns.get_loc("Message Length Break")
+likeEnd = df.columns.get_loc("Message Like Break")
+likeRecEnd= df.columns.get_loc("Like Break Received")
+likeGivenEnd = df.columns.get_loc("Like Break Given")
+likeRecPercentEnd = df.columns.get_loc("Like Break Received Percent")
+likeGivenPercentEnd = df.columns.get_loc("Like Break Given Percent")
 dummy = pd.DataFrame(df).to_numpy()
+
 TimeArray = dummy[:,10:timeEnd]
 LengthArray = dummy[:,timeEnd+1:lengthEnd]
+LikeArray = dummy[:,lengthEnd+1:likeEnd]
+LikeRecArray = dummy[:,likeEnd+1:likeRecEnd]
+LikeGivenArray = dummy[:,likeRecEnd+1:likeGivenEnd]
+LikeRecPercentArray = dummy[:,likeGivenEnd+1:likeRecPercentEnd]
+LikeGivenPercentArray = dummy[:,likeRecPercentEnd+1:likeGivenPercentEnd]
 
-#initialize
-names = []
-posts = []
-likesReceived = []
-likesGiven = []
-likesRatio = []
-likesAvg = []
-misspelledWords = []
-imagesGifs = []
-kicked = []
-kickedOthers = []
+Columns = df.columns.values.tolist()
+PeopleNameArray = Columns[likeEnd+1:likeRecEnd]
 
-#make individual arrays for each data set
 height = len((df))
-i = 0
-while i <= height-1:
-    names = np.append(names, dummy[i][0])
-    posts = np.append(posts, dummy[i][1])
-    likesReceived = np.append(likesReceived, dummy[i][2])
-    likesGiven = np.append(likesGiven, dummy[i][3])
-    likesRatio = np.append(likesRatio, dummy[i][4])
-    likesAvg = np.append(likesAvg, dummy[i][5])
-    misspelledWords = np.append(misspelledWords, dummy[i][6])
-    imagesGifs = np.append(imagesGifs, dummy[i][7])
-    kicked = np.append(kicked, dummy[i][8])
-    kickedOthers = np.append(kickedOthers, dummy[i][9])
-    i+=1
-legendCol = round(len(names)/(len(names)**.5))
-
-#ToBeDeleted
-
-deletePosts = []
-deleteRec = []
-deleteGiv = []
-deleteLikeRat = []
-deleteImGif = []
-deleteKicked = []
-deleteKickedOther = []
-
-#Prepares to get rid of strings in the Like Ratio array
-i = 0
-while i <= height-1:
-    try:
-        likesRatio[i] = float(likesRatio[i])
+def AppendArray(length, inputArray, ArrayPosition, i = 0, OutputArray = []):
+    while i <= length - 1:
+        OutputArray = np.append(OutputArray, inputArray[i][ArrayPosition])
         i+=1
-    except:
-        deleteLikeRat = np.append(deleteLikeRat, i)
-        i+=1
+    return OutputArray
 
-#sum everything up for truncating data
-sumPosts = np.sum(posts)
-sumlikesRec = np.sum(likesReceived) 
-sumlikesGiv = np.sum(likesGiven)
-sumImGif = np.sum(imagesGifs)
-sumKicked = np.sum(kicked)
-sumKickedOther = np.sum(kickedOthers)
+names = AppendArray(height, dummy, 0)
+posts = AppendArray(height, dummy, 1)
+likesReceived = AppendArray(height, dummy, 2)
+likesGiven = AppendArray(height, dummy, 3)
+likesRatio = AppendArray(height, dummy, 4)
+likeAvg = AppendArray(height, dummy, 5)
+misspelledWords = AppendArray(height, dummy, 6)
+imagesGifs = AppendArray(height, dummy, 7)
+kicked = AppendArray(height, dummy, 8)
+kickedOthers = AppendArray(height, dummy, 9)
 
-#Choosing which elements to be removed and consolidated
-i = 0
-while i <= height-1:
-    if posts[i]/sumPosts < .03:
-        deletePosts = np.append(deletePosts, int(i))
-    if likesReceived[i]/sumlikesRec < .03:
-        deleteRec = np.append(deleteRec, int(i))
-    if likesGiven[i]/sumlikesGiv < .03:
-        deleteGiv = np.append(deleteGiv, int(i))
-    if imagesGifs[i]/sumImGif < .03:
-        deleteImGif = np.append(deleteImGif, int(i))
-    if kicked[i]/sumKicked <= 0:
-        deleteKicked = np.append(deleteKicked, int(i))
-    if kickedOthers[i]/sumKickedOther <= 0:
-        deleteKickedOther = np.append(deleteKickedOther, int(i))
-    i+=1
-#Find Other Values
-deleteKicked = np.array(deleteKicked)
-otherPosts = posts[deletePosts.astype(int)].sum()
-otherRec = likesReceived[deleteRec.astype(int)].sum()
-otherGiv = likesGiven[deleteGiv.astype(int)].sum()
-otherImGif = imagesGifs[deleteImGif.astype(int)].sum()
-otherKicked = kicked[deleteKicked.astype(int)].sum()
-otherKickedOther = kickedOthers[deleteKickedOther.astype(int)].sum()
+def ArrayTrimmer(array, name, threshold = None, zeroChecker = False):
+    #Delete String Values
+    deleteArray = []
+    i = 0
+    while i < len(array):
+        try:
+            array[i] = float(array[i])
+            i+=1
+        except:
+            deleteArray = np.append(deleteArray, i)
+            i+=1
+    #Delete Strings
+    if len(deleteArray) > 0:
+        array = np.delete(array, deleteArray.astype(int))
+        name = np.delete(name, deleteArray.astype(int))
+    
+    #Checks for zeros and deletes them
+    if zeroChecker == True:
+        deleteArray = []
+        i = 0
+        while i < len(array):
+            if array[i] == 0:
+                deleteArray = np.append(deleteArray, int(i))
+            i+=1
+        
+        if len(deleteArray) > 0:
+            array = np.delete(array, deleteArray.astype(int))
+            name = np.delete(name, deleteArray.astype(int))
 
-#Array that updates everything
-def updateVal(old, name, deletion, other = None):
-    update = np.delete(old, deletion.astype(int))
-    updatedName = np.delete(name, deletion.astype(int))
-    if other != None:
-        update = np.append(update, other)
-        updatedName = np.append(updatedName, "Other")
-    return [update, updatedName]
+    #Delete Things Below the threshold   
+    if threshold != None:
+        deleteArray = []
+        ArrSum = np.sum(array)
+        i = 0
+        while i < len(array):
+            if array[i]/ArrSum < threshold:
+                deleteArray = np.append(deleteArray, int(i))
+            i+=1
+        if len(deleteArray) > 0:
+            OtherValue = array[deleteArray.astype(int)].sum()
+            array = np.delete(array, deleteArray.astype(int))
+            name = np.delete(name, deleteArray.astype(int))
+            
+            array = np.append(array, OtherValue)
+            name = np.append(name, "Other")
+            
+    
+    
+    return array, name 
+
+
 
 #Finalzing arrays for graphs
 
-updatePost, namePost = updateVal(posts, names, deletePosts, otherPosts)
-updateRec, nameRec = updateVal(likesReceived, names, deleteRec, otherRec)
-updateGiv, nameGiv = updateVal(likesGiven, names, deleteGiv, otherGiv)
-updateImGif, nameImGif = updateVal(imagesGifs, names, deleteImGif, otherImGif)
-updateKicked, nameKicked = updateVal(kicked, names, deleteKicked)
-updateKickedOther, nameKickedOther = updateVal(kickedOthers, names, deleteKickedOther)
-
-
-updateLikeRat_Rec_to_Giv = np.delete(likesRatio, np.array(deleteLikeRat, dtype=int)).astype(float)
+updatePost, namePost = ArrayTrimmer(posts, names, .03)
+updateRec, nameRec = ArrayTrimmer(likesReceived, names, .03)
+updateGiv, nameGiv = ArrayTrimmer(likesGiven, names, .03)
+updateImGif, nameImGif = ArrayTrimmer(imagesGifs, names, .03)
+updateKicked, nameKicked = ArrayTrimmer(kicked, names, .03)
+updateKickedOther, nameKickedOther = ArrayTrimmer(kickedOthers, names, .03)
+updateLikeAvg, nameLikeAvg = ArrayTrimmer(likeAvg, names)
 
 #deleting the zeros for it to be flipped
-i = 0
-delLikeRatZero = []
-while i <= len(updateLikeRat_Rec_to_Giv)-1:
-    if updateLikeRat_Rec_to_Giv[i] == 0:
-        delLikeRatZero = np.append(delLikeRatZero, i)
-    i+=1
-    
-updateLikeRat_Rec_to_Giv = np.delete(updateLikeRat_Rec_to_Giv, delLikeRatZero)
+updateLikeRat_Rec_to_Giv, nameLikeRat = ArrayTrimmer(likesRatio, names, zeroChecker = True)
+
 updateLikeRat_Giv_to_Rec = []
 for j in updateLikeRat_Rec_to_Giv:
     updateLikeRat_Giv_to_Rec = np.append(updateLikeRat_Giv_to_Rec, j**(-1) )
 
-deleteLikeRat = np.append(deleteLikeRat, delLikeRatZero)
-nameLikeRat = np.delete(names, deleteLikeRat.astype(int))
 #Writing pdf file and making graphs
 BarMaxWidth = 18
+
+def autolabel(rects, ax):
+    """
+    Attach a text label above each bar displaying its height
+    """
+    for rect in rects:
+        height = rect.get_height()
+        ax.text(rect.get_x() + rect.get_width()/2., 1.05*height,
+                str('%f' % float(height))[:6], fontsize=8, ha='center', va='bottom')
+
 
 def pie_chart(title, data, info):
     fig = plt.figure(figsize =(8, 8))
@@ -178,37 +171,55 @@ def boxplot(title, y_label, data, column, info=None, Dataframe = True):
             Page.text(0.5,0.5, column[i] + "\n" + describe, transform=Page.transFigure, size=24, ha="center")
             pdf.savefig()
             plt.close()
-        
+            
 def bar(name, data, Title, x_label, y_label):
     divide = math.floor(len(name)/BarMaxWidth)
     j = 0
     while j <= divide*(BarMaxWidth-1) - 1:
-        fig = plt.figure(figsize =(8, 8))
+        fig, ax = plt.subplots()
+        rects1 = ax.bar(name, data[j:j+BarMaxWidth], color='g')
+        x_pos = [i for i, _ in enumerate(name)]
+        fig.set_figheight(8)
+        fig.set_figwidth(8)
         plt.title(Title, fontsize=18)
         plt.xlabel(x_label, fontsize=14)
         plt.ylabel(y_label, fontsize=14)
+        ax.set_ylim([0,1.1*np.max(data[j:j+BarMaxWidth])])
         plt.xticks(rotation=90)
         plt.bar(height = data[j:j+BarMaxWidth], x = name[j:j+BarMaxWidth], color = 'g')
+        autolabel(rects1, ax)
         pdf.savefig(fig) 
         plt.close(fig)
         j+=BarMaxWidth
         
-    fig = plt.figure(figsize =(8, 8))
+    fig, ax = plt.subplots()
+    rects1 = ax.bar(name, data[j:], color='g')
+    x_pos = [i for i, _ in enumerate(name)]
+    fig.set_figheight(8)
+    fig.set_figwidth(8)
     plt.title(Title, fontsize=18)
     plt.xlabel(x_label, fontsize=14)
     plt.ylabel(y_label, fontsize=14)
+    ax.set_ylim([0,1.1*np.max(data[j:])])
     plt.xticks(rotation=90)
     plt.bar(height = data[j:], x = name[j:], color = 'g')
+    autolabel(rects1, ax)
     pdf.savefig(fig) 
     plt.close(fig)
     
 def barSmall(name, data, Title, x_label, y_label):
-    fig = plt.figure(figsize =(8, 8))
+    fig, ax = plt.subplots()
+    rects1 = ax.bar(name, data, color='g')
+    x_pos = [i for i, _ in enumerate(name)]
+    fig.set_figheight(8)
+    fig.set_figwidth(8)
     plt.title(Title, fontsize=18)
     plt.xlabel(x_label, fontsize=14)
     plt.ylabel(y_label, fontsize=14)
+    ax.set_ylim([0,1.1*np.max(data)])
     plt.xticks(rotation=90)
     plt.bar(height = data, x = name, color = 'g')
+    autolabel(rects1, ax)
     pdf.savefig(fig)
     plt.close(fig)
     
@@ -329,7 +340,8 @@ with PdfPages('graph.pdf') as pdf:
     
     firstPage = plt.figure(figsize=(8, 8))
     firstPage.clf()
-    firstPage.text(0.5,0.5, "GroupMe Chat Data Visualization", transform=firstPage.transFigure, ha="center", fontsize = 24)
+    firstPage.text(0.5,0.5, "GroupMe Chat Data Visualization", transform=firstPage.transFigure, 
+                   ha="center", fontsize = 24)
     pdf.savefig()
     plt.close()
 
@@ -362,13 +374,15 @@ with PdfPages('graph.pdf') as pdf:
     
     bar(names, likesReceived, "Likes Received", "Users", "Number of Likes Received")
     
+    bar(nameLikeAvg, updateLikeAvg, "Average Likes Received", "Name", "Average Likes per Post")
+    
     pie_chart("Likes Given", updateGiv, nameGiv)
     
     
     bar(names, likesGiven, "Likes Given", "Users", "Number of Likes Given")
     
     boxplot("Likes Given and Likes Received", "Likes", 
-            [likesGiven, likesReceived], ["Likes Given", "Likes Recieved"],["Likes Given", "Likes Recieved"])
+            [likesGiven, likesReceived], ["Likes Given", "Likes Received"],["Likes Given", "Likes Received"])
     
     bar(nameLikeRat, updateLikeRat_Rec_to_Giv, "Likes Received to Given Ratio", "Users", "Ratio")
 
@@ -414,7 +428,8 @@ with PdfPages('graph.pdf') as pdf:
     MasterDay = []
     MasterHour = []
     MasterLength = []
-    for i in range(0, len(TimeArray)):
+    MasterLike = []
+    for i in range(0, len(names)):
         DayData = []
         HourData = []
         timeLength = len(TimeArray[i])
@@ -437,10 +452,36 @@ with PdfPages('graph.pdf') as pdf:
         
         LengthData = sorted(LengthData) 
         
+        #Cutting Down Like Data
+        
+        lengthLike = len(LikeArray[i])
+        LikeData = []
+        for j in range(0, lengthLike):
+            if LikeArray[i][j] == "nothingLike":
+                break
+            LikeData = np.append(LikeData, int(LikeArray[i][j]))
+            
+        #Likes Received Data
+        LikeRecArrayTemp, PeopleNameRecArrayTemp = ArrayTrimmer(LikeRecArray[i], PeopleNameArray, .03)
+        BarLikeRecArrayTemp, BarPeopleNameRecArrayTemp = ArrayTrimmer(LikeRecArray[i], PeopleNameArray)
+        
+        #Likes Given Data 
+        LikeGivenArrayTemp, PeopleNameGivenArrayTemp = ArrayTrimmer(LikeGivenArray[i], PeopleNameArray, .03)
+        BarLikeGivenArrayTemp, BarPeopleNameGivenArrayTemp = ArrayTrimmer(LikeGivenArray[i], PeopleNameArray)
+        
+        #Likes Received Percent Data
+        LikeRecPercentArrayTemp, PeopleNameRecPercentArrayTemp = \
+        ArrayTrimmer(LikeRecPercentArray[i], PeopleNameArray)
+        
+        #Likes Given Percent Data
+        LikeGivenPercentArrayTemp, PeopleNameGivenPercentArrayTemp = \
+        ArrayTrimmer(LikeGivenPercentArray[i], PeopleNameArray)
+        
         #New Person Page
         Page = plt.figure(figsize=(8, 8))
         Page.clf()
-        Page.text(0.5,0.5, names[i] + "'s Message Time Data", transform=firstPage.transFigure, ha="center", fontsize = 24)
+        Page.text(0.5,0.5, names[i] + "'s Message Time Data", transform=firstPage.transFigure
+                  , ha="center", fontsize = 24)
         pdf.savefig()
         plt.close()
         Hour(HourData, "Hourly Messaging of " + names[i]) 
@@ -448,18 +489,38 @@ with PdfPages('graph.pdf') as pdf:
                   "Total Messaging over Time of " + names[i], 
                   "Weekly Messaging of " + names[i])
         boxplot("Character Length of " + names[i] + "'s Messages", "Character Length", 
-                LengthData, ["Length"], Dataframe = False)
+                LengthData, ["Length of " + names[i]], Dataframe = False)
+        
+        boxplot(names[i] + "'s Likes per Message", "Likes per Message", LikeData, 
+                ['Likes Per Message of ' + names[i]], Dataframe = False)
+        
+        #Likes Per User Graphs
+        pie_chart("User Breakdown of " +names[i]+ "'s Received Likes", LikeRecArrayTemp, PeopleNameRecArrayTemp)
+        bar(BarPeopleNameRecArrayTemp, BarLikeRecArrayTemp, "User Breakdown of " +names[i]+ "'s Received Likes", 
+            "names", "Number of Likes Received")
+        
+        pie_chart("User Breakdown of " +names[i]+ "'s Likes Given Out", LikeGivenArrayTemp, PeopleNameGivenArrayTemp)
+        bar(BarPeopleNameGivenArrayTemp, BarLikeGivenArrayTemp, "User Breakdown of " +names[i]+ "'s Likes Given Out", 
+            "Names", "Number of Likes Given Out")
+        
+        bar(PeopleNameRecPercentArrayTemp, LikeRecPercentArrayTemp, 
+            "Normalized User Breakdown of\n" +names[i]+ "'s Received Likes", 
+            "Names", "Likes Per Post Received")
+        
+        bar(PeopleNameGivenPercentArrayTemp, LikeGivenPercentArrayTemp, 
+            "Normalized User Breakdown of\n" +names[i]+ "'s Likes Given Out", 
+            "Names", "Number of Likes Given Out")
         
         
         #Master
         MasterDay = np.append(MasterDay, DayData)
         MasterHour = np.append(MasterHour, HourData)
         MasterLength = np.append(MasterLength, LengthData)
-    
+        MasterLike = np.append(MasterLike, LikeData)
+
     #Sorting
     MasterDay = sorted(MasterDay)
     MasterHour = sorted(MasterHour)
-    MasterLength = sorted(MasterLength)
     
     Page = plt.figure(figsize=(8, 8))
     Page.clf()
@@ -471,4 +532,6 @@ with PdfPages('graph.pdf') as pdf:
             "Total Messaging of the Group Chat over Time", 
             "Weekly Messaging of the Group Chat")
     boxplot("Character Length of Group's Messages", "Character Length", 
-                MasterLength, ["Length"], Dataframe = False)
+                MasterLength, ["Group Message Length"], Dataframe = False)
+    boxplot("The Group's Likes per Message", "Likes per Message", MasterLike, 
+                ["Likes Per Message of the Group"], Dataframe = False)
