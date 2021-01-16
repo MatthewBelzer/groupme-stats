@@ -1,5 +1,3 @@
-import pandas as pd
-import numpy as np
 import scipy
 from scipy.stats import norm
 import matplotlib.pyplot as plt
@@ -175,9 +173,9 @@ def boxplot(title, y_label, data, column, info=None, Dataframe = True):
 def bar(name, data, Title, x_label, y_label):
     divide = math.floor(len(name)/BarMaxWidth)
     j = 0
-    while j <= divide*(BarMaxWidth-1) - 1:
+    while j < divide*(BarMaxWidth-1):
         fig, ax = plt.subplots()
-        rects1 = ax.bar(name, data[j:j+BarMaxWidth], color='g')
+        rects1 = ax.bar(name[j:j+BarMaxWidth], data[j:j+BarMaxWidth], color='g')
         x_pos = [i for i, _ in enumerate(name)]
         fig.set_figheight(8)
         fig.set_figwidth(8)
@@ -193,7 +191,7 @@ def bar(name, data, Title, x_label, y_label):
         j+=BarMaxWidth
         
     fig, ax = plt.subplots()
-    rects1 = ax.bar(name, data[j:], color='g')
+    rects1 = ax.bar(name[j:], data[j:], color='g')
     x_pos = [i for i, _ in enumerate(name)]
     fig.set_figheight(8)
     fig.set_figwidth(8)
