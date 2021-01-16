@@ -86,18 +86,29 @@ def ArrayTrimmer(array, name, threshold = None, zeroChecker = False):
         deleteArray = []
         ArrSum = np.sum(array)
         i = 0
-        while i < len(array):
-            if array[i]/ArrSum < threshold:
+        if ArrSum != 0:
+            while i < len(array):
+                if array[i]/ArrSum < threshold:
+                    deleteArray = np.append(deleteArray, int(i))
+                i+=1
+            if len(deleteArray) > 0:
+                OtherValue = array[deleteArray.astype(int)].sum()
+                array = np.delete(array, deleteArray.astype(int))
+                name = np.delete(name, deleteArray.astype(int))
+
+                array = np.append(array, OtherValue)
+                name = np.append(name, "Other")
+        else:
+            while i < len(array):
                 deleteArray = np.append(deleteArray, int(i))
-            i+=1
-        if len(deleteArray) > 0:
-            OtherValue = array[deleteArray.astype(int)].sum()
+                i+=1
+            OtherValue = 0
             array = np.delete(array, deleteArray.astype(int))
             name = np.delete(name, deleteArray.astype(int))
-            
+
             array = np.append(array, OtherValue)
             name = np.append(name, "Other")
-            
+
     
     
     return array, name 
